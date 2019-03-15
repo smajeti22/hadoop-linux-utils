@@ -1,0 +1,7 @@
+[ambari-agents]
+c1265-node2
+c1265-node3
+c1265-node4
+[ambari-server]
+c1265-node1
+#master03 ansible_host=172.26.78.89 ansible_user=centos ansible_ssh_private_key_file="~/.ssh/smajeti-k1.pem" rack=/default-rack

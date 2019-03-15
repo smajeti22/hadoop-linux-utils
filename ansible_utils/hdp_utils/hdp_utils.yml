@@ -1,0 +1,24 @@
+---
+#- hosts: localhost
+#  tasks:
+#  - name: copy ssh keys to cluster nodes
+#    command: bash -c "source /Users/smajeti/TOOLS/easy_connect/setup_ssh_clush.sh; init_vars ; setup_ssh_main c1265 '' 'true' 'false'"
+- hosts: ambari-agents
+  tasks:
+  - debug:
+      msg: Copying files to cluster nodes
+  
+  - name: Copy Jar to /tmp directory in all nodes
+    copy:
+      src: "/Users/smajeti/IdeaProjects/HDP-3.1.0.0-78-tag/hadoop-hdfs-project/hadoop-hdfs/target/hadoop-hdfs-3.1.2-SNAPSHOT.jar"
+      dest: /tmp 
+      force: yes
+
+  - name: upload apply_patch script to all nodes 
+    copy:
+      src: "/Users/smajeti/TOOLS/easy_connect/apply_patch.sh"
+      dest: /tmp
+      force: yes
+      mode: 0777
+  - name: Run the apply_patch.sh in all nodes
+    command: "sh /tmp/apply_patch.sh hadoop-hdfs-3.1.1.3.0.1.0-187.jar hadoop-hdfs-3.1.2-SNAPSHOT.jar /tmp" 
