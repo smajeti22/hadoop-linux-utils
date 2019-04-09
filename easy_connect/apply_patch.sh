@@ -12,12 +12,21 @@ then
         just_copy=true
 fi
 
-for original_jar_loc in `find /usr/hdp -type f -name  $original_jar`
-do
-        base_dir=`echo $(dirname $original_jar_loc)`
-        rm -rf $original_jar_loc
-        cp -f $target_jar_abs_path/$target_jar $base_dir
-done
+if [ $just_copy == "false" ]
+then
+        for original_jar_loc in `find /usr/hdp -type f -name  $original_jar`
+        do
+                base_dir=`echo $(dirname $original_jar_loc)`
+                cp -f $original_jar_loc /tmp
+                rm -rf $original_jar_loc
+                cp -f $target_jar_abs_path/$target_jar $base_dir
+        done
+else
+        for target_jar_loc in `find /usr/hdp -type f -name $target_jar`
+        do
+                cp -f $target_jar_abs_path/$target_jar $target_jar_loc
+        done
+fi
 
 if [ -z $base_dir ]
 then
