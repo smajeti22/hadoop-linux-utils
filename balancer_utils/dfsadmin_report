@@ -1,0 +1,208 @@
+Configured Capacity: 186761148693504 (169.86 TB)
+Present Capacity: 184911085934413 (168.18 TB)
+DFS Remaining: 72026693908047 (65.51 TB)
+DFS Used: 112884392026366 (102.67 TB)
+DFS Used%: 61.05%
+Under replicated blocks: 464
+Blocks with corrupt replicas: 0
+Missing blocks: 0
+Missing blocks (with replication factor 1): 0
+
+-------------------------------------------------
+Live datanodes (10):
+
+Name: 10.100.116.36:1019 (worker10.orange-sonatel.com)
+Hostname: worker10.orange-sonatel.com
+Decommission Status : Normal
+Configured Capacity: 19159179896320 (17.43 TB)
+DFS Used: 9150341489427 (8.32 TB)
+Non DFS Used: 142212088557 (132.45 GB)
+DFS Remaining: 9863553200085 (8.97 TB)
+DFS Used%: 47.76%
+DFS Remaining%: 51.48%
+Configured Cache Capacity: 0 (0 B)
+Cache Used: 0 (0 B)
+Cache Remaining: 0 (0 B)
+Cache Used%: 100.00%
+Cache Remaining%: 0.00%
+Xceivers: 72
+Last contact: Tue Apr 30 08:20:30 GMT 2019
+Last Block Report: Tue Apr 30 02:34:56 GMT 2019
+
+
+Name: 10.100.116.34:1019 (worker8.orange-sonatel.com)
+Hostname: worker8.orange-sonatel.com
+Decommission Status : Normal
+Configured Capacity: 19159179896320 (17.43 TB)
+DFS Used: 9169396684339 (8.34 TB)
+Non DFS Used: 70177726413 (65.36 GB)
+DFS Remaining: 9917622751130 (9.02 TB)
+DFS Used%: 47.86%
+DFS Remaining%: 51.76%
+Configured Cache Capacity: 0 (0 B)
+Cache Used: 0 (0 B)
+Cache Remaining: 0 (0 B)
+Cache Used%: 100.00%
+Cache Remaining%: 0.00%
+Xceivers: 58
+Last contact: Tue Apr 30 08:20:30 GMT 2019
+Last Block Report: Tue Apr 30 04:17:58 GMT 2019
+
+
+Name: 10.100.116.33:1019 (worker7.orange-sonatel.com)
+Hostname: worker7.orange-sonatel.com
+Decommission Status : Normal
+Configured Capacity: 19159179896320 (17.43 TB)
+DFS Used: 9193668375731 (8.36 TB)
+Non DFS Used: 37669204301 (35.08 GB)
+DFS Remaining: 9927204081296 (9.03 TB)
+DFS Used%: 47.99%
+DFS Remaining%: 51.81%
+Configured Cache Capacity: 0 (0 B)
+Cache Used: 0 (0 B)
+Cache Remaining: 0 (0 B)
+Cache Used%: 100.00%
+Cache Remaining%: 0.00%
+Xceivers: 25
+Last contact: Tue Apr 30 08:20:30 GMT 2019
+Last Block Report: Tue Apr 30 06:06:28 GMT 2019
+
+
+Name: 10.100.116.32:1019 (worker6.orange-sonatel.com)
+Hostname: worker6.orange-sonatel.com
+Decommission Status : Normal
+Configured Capacity: 19159179896320 (17.43 TB)
+DFS Used: 9158327230740 (8.33 TB)
+Non DFS Used: 101068731628 (94.13 GB)
+DFS Remaining: 9898183175051 (9.00 TB)
+DFS Used%: 47.80%
+DFS Remaining%: 51.66%
+Configured Cache Capacity: 0 (0 B)
+Cache Used: 0 (0 B)
+Cache Remaining: 0 (0 B)
+Cache Used%: 100.00%
+Cache Remaining%: 0.00%
+Xceivers: 51
+Last contact: Tue Apr 30 08:20:30 GMT 2019
+Last Block Report: Tue Apr 30 02:43:05 GMT 2019
+
+
+Name: 10.100.116.35:1019 (worker9.orange-sonatel.com)
+Hostname: worker9.orange-sonatel.com
+Decommission Status : Normal
+Configured Capacity: 19159179896320 (17.43 TB)
+DFS Used: 9077416617925 (8.26 TB)
+Non DFS Used: 75781471803 (70.58 GB)
+DFS Remaining: 10004452801005 (9.10 TB)
+DFS Used%: 47.38%
+DFS Remaining%: 52.22%
+Configured Cache Capacity: 0 (0 B)
+Cache Used: 0 (0 B)
+Cache Remaining: 0 (0 B)
+Cache Used%: 100.00%
+Cache Remaining%: 0.00%
+Xceivers: 65
+Last contact: Tue Apr 30 08:20:29 GMT 2019
+Last Block Report: Tue Apr 30 07:15:01 GMT 2019
+
+
+Name: 10.100.116.25:1019 (worker4.orange-sonatel.com)
+Hostname: worker4.orange-sonatel.com
+Rack: /rack2
+Decommission Status : Normal
+Configured Capacity: 17951517328896 (16.33 TB)
+DFS Used: 14496520808872 (13.18 TB)
+Non DFS Used: 162740714584 (151.56 GB)
+DFS Remaining: 3288802542012 (2.99 TB)
+DFS Used%: 80.75%
+DFS Remaining%: 18.32%
+Configured Cache Capacity: 0 (0 B)
+Cache Used: 0 (0 B)
+Cache Remaining: 0 (0 B)
+Cache Used%: 100.00%
+Cache Remaining%: 0.00%
+Xceivers: 147
+Last contact: Tue Apr 30 08:20:29 GMT 2019
+Last Block Report: Tue Apr 30 06:19:09 GMT 2019
+
+
+Name: 10.100.116.31:1019 (worker5.orange-sonatel.com)
+Hostname: worker5.orange-sonatel.com
+Decommission Status : Normal
+Configured Capacity: 19159179896320 (17.43 TB)
+DFS Used: 9115549633136 (8.29 TB)
+Non DFS Used: 97200171920 (90.52 GB)
+DFS Remaining: 9942399535624 (9.04 TB)
+DFS Used%: 47.58%
+DFS Remaining%: 51.89%
+Configured Cache Capacity: 0 (0 B)
+Cache Used: 0 (0 B)
+Cache Remaining: 0 (0 B)
+Cache Used%: 100.00%
+Cache Remaining%: 0.00%
+Xceivers: 114
+Last contact: Tue Apr 30 08:20:31 GMT 2019
+Last Block Report: Tue Apr 30 05:49:42 GMT 2019
+
+
+Name: 10.100.116.22:1019 (worker1.orange-sonatel.com)
+Hostname: worker1.orange-sonatel.com
+Rack: /rack1
+Decommission Status : Normal
+Configured Capacity: 17951517328896 (16.33 TB)
+DFS Used: 13795145984724 (12.55 TB)
+Non DFS Used: 510300601132 (475.25 GB)
+DFS Remaining: 3642540309987 (3.31 TB)
+DFS Used%: 76.85%
+DFS Remaining%: 20.29%
+Configured Cache Capacity: 0 (0 B)
+Cache Used: 0 (0 B)
+Cache Remaining: 0 (0 B)
+Cache Used%: 100.00%
+Cache Remaining%: 0.00%
+Xceivers: 132
+Last contact: Tue Apr 30 08:20:32 GMT 2019
+Last Block Report: Tue Apr 30 05:34:44 GMT 2019
+
+
+Name: 10.100.116.24:1019 (worker3.orange-sonatel.com)
+Hostname: worker3.orange-sonatel.com
+Rack: /rack2
+Decommission Status : Normal
+Configured Capacity: 17951517328896 (16.33 TB)
+DFS Used: 14896860695706 (13.55 TB)
+Non DFS Used: 434073909606 (404.26 GB)
+DFS Remaining: 2617390854090 (2.38 TB)
+DFS Used%: 82.98%
+DFS Remaining%: 14.58%
+Configured Cache Capacity: 0 (0 B)
+Cache Used: 0 (0 B)
+Cache Remaining: 0 (0 B)
+Cache Used%: 100.00%
+Cache Remaining%: 0.00%
+Xceivers: 149
+Last contact: Tue Apr 30 08:20:30 GMT 2019
+Last Block Report: Tue Apr 30 06:14:14 GMT 2019
+
+
+Name: 10.100.116.23:1019 (worker2.orange-sonatel.com)
+Hostname: worker2.orange-sonatel.com
+Rack: /rack1
+Decommission Status : Normal
+Configured Capacity: 17951517328896 (16.33 TB)
+DFS Used: 14831164505766 (13.49 TB)
+Non DFS Used: 194309543770 (180.96 GB)
+DFS Remaining: 2924544657767 (2.66 TB)
+DFS Used%: 82.62%
+DFS Remaining%: 16.29%
+Configured Cache Capacity: 0 (0 B)
+Cache Used: 0 (0 B)
+Cache Remaining: 0 (0 B)
+Cache Used%: 100.00%
+Cache Remaining%: 0.00%
+Xceivers: 107
+Last contact: Tue Apr 30 08:20:29 GMT 2019
+Last Block Report: Tue Apr 30 07:30:26 GMT 2019
+
+
+
