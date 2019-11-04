@@ -147,7 +147,7 @@ mergeAuthToLocalConfigAndReconfigure(){
 	echo "$cluster1_auth_to_local" > $STAGE_LOC/temp_value_cluster1
 	echo "$cluster2_auth_to_local" >> $STAGE_LOC/temp_value_cluster1
 	sed -i.bkp 's/\\n/\'$'\n''/g' $STAGE_LOC/temp_value_cluster1
-	sed -i.bkp 's/\$/\\$/g' temp_value_cluster1
+	sed -i.bkp 's/\$/\\$/g' $STAGE_LOC/temp_value_cluster1
 	sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER1_AMBARI_PROTOCOL --user=$CLUSTER1_AMBARI_ADMIN_USER --password=$CLUSTER1_AMBARI_ADMIN_PASSWORD --port=$CLUSTER1_AMBARI_PORT --action=set --host=$CLUSTER1_AMBARI_HOST --cluster=$CLUSTER1_NAME --config-type=core-site -k hadoop.security.auth_to_local -v \"`cat $STAGE_LOC/temp_value_cluster1`\""
 	
 	cluster2_auth_to_local=`cat $STAGE_LOC/core-site_$CLUSTER2_AMBARI_HOST | grep hadoop.security.auth_to_local | cut -d '"' -f4`
@@ -155,7 +155,7 @@ mergeAuthToLocalConfigAndReconfigure(){
 	echo "$cluster2_auth_to_local" > $STAGE_LOC/temp_value_cluster2
 	echo "$cluster1_auth_to_local" >> $STAGE_LOC/temp_value_cluster2
 	sed -i.bkp 's/\\n/\'$'\n''/g' $STAGE_LOC/temp_value_cluster2
-	sed -i.bkp 's/\$/\\$/g' temp_value_cluster2
+	sed -i.bkp 's/\$/\\$/g' $STAGE_LOC/temp_value_cluster2
 	sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER2_AMBARI_PROTOCOL --user=$CLUSTER2_AMBARI_ADMIN_USER --password=$CLUSTER2_AMBARI_ADMIN_PASSWORD --port=$CLUSTER2_AMBARI_PORT --action=set --host=$CLUSTER2_AMBARI_HOST --cluster=$CLUSTER2_NAME --config-type=core-site -k hadoop.security.auth_to_local -v \"`cat $STAGE_LOC/temp_value_cluster2`\""
 	echo -e "\n`ts` Modified hadoop.security.auth_to_local for cluster $CLUSTER1_NAME:"
 	echo -e "\n`ts` `cat $STAGE_LOC/temp_value_cluster1`"
