@@ -5,8 +5,9 @@
 ###########################################
 set -x
 
-STAGE_LOC="/tmp/stage"
+STAGE_LOC="/tmp/stage/cross-realm-`date '+%Y%m%d%H%M%S'`"
 mkdir -p $STAGE_LOC
+rm -rf $STAGE_LOC/*
 #User Input Required Mandatory
 CLUSTER1_SSH_PASSWORD=smajeti
 CLUSTER2_AMBARI_HOST=c2265-node1.labs.support.hortonworks.com
@@ -26,10 +27,10 @@ CLUSTER1_AMBARI_PROTOCOL=http
 CLUSTER2_AMBARI_PROTOCOL=http
 CLUSTER1_AMBARI_PORT=8080
 CLUSTER2_AMBARI_PORT=8080
-CLUSTER1_NAME=
-CLUSTER2_NAME=
-CLUSTER1_DOMAIN=
-CLUSTER2_DOMAIN=
+CLUSTER1_NAME=""
+CLUSTER2_NAME=""
+CLUSTER1_DOMAIN=""
+CLUSTER2_DOMAIN=""
 
 #usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 #[ $# -eq 0 ] && usage
@@ -50,14 +51,17 @@ CLUSTER2_DOMAIN=
 #      ;;
 #  esac
 #done
-
-init(){
- yum -y install sshpass
-	ssh-keygen -R $CLUSTER1_AMBARI_HOST
-	ssh-keygen -R $CLUSTER2_AMBARI_HOST
+ts()
+{
+        echo "`date +%Y-%m-%d,%H:%M:%S`"
 }
 
-initAmbariPorts(){
+	echo -e "\n`ts` Installing sshpass as needed" |tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout
+	(brew list sshpass || brew install sshpass || yum list installed sshpass || yum -y install sshpass) > /dev/null 2>&1
+	ssh-keygen -R $CLUSTER1_AMBARI_HOST
+	ssh-keygen -R $CLUSTER2_AMBARI_HOST
+
+	echo -e "\n`ts` Discovering Ambari Port and Protocol from both clusters" |tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout
 	sshpass -p $CLUSTER1_SSH_PASSWORD  scp  -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST:/etc/ambari-server/conf/ambari.properties $STAGE_LOC/ambari.properties.$CLUSTER1_AMBARI_HOST
 	cluster1_ssl_enabled=`grep api.ssl $STAGE_LOC/ambari.properties.$CLUSTER1_AMBARI_HOST | cut -d '=' -f2 | tr -d ' '`
 	CLUSTER1_AMBARI_PORT=`grep client.api.port $STAGE_LOC/ambari.properties.$CLUSTER1_AMBARI_HOST | cut -d '=' -f2 | tr -d ' '` 
@@ -88,15 +92,16 @@ initAmbariPorts(){
 			CLUSTER2_AMBARI_PORT=8080
 		fi
 	fi
+	echo -e "\n`ts` CLUSTER1_AMBARI_PORT=$CLUSTER1_AMBARI_PORT ,CLUSTER1_AMBARI_PROTOCOL=$CLUSTER1_AMBARI_PROTOCOL" |tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout
+	echo -e "\n`ts` CLUSTER2_AMBARI_PORT=$CLUSTER2_AMBARI_PORT ,CLUSTER2_AMBARI_PROTOCOL=$CLUSTER2_AMBARI_PROTOCOL" |tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout
 
-}
-
-initClusterNames(){
-	CLUSTER1_NAME="$(curl -u ${CLUSTER1_AMBARI_ADMIN_USER}:${CLUSTER1_AMBARI_ADMIN_PASSWORD} -i -H 'X-Requested-By: ambari'  $CLUSTER1_AMBARI_PROTOCOL://$CLUSTER1_AMBARI_HOST:$CLUSTER1_AMBARI_PORT/api/v1/clusters | sed -n 's/.*"cluster_name" : "\([^\"]*\)".*/\1/p')"
-	CLUSTER2_NAME="$(curl -u ${CLUSTER2_AMBARI_ADMIN_USER}:${CLUSTER2_AMBARI_ADMIN_PASSWORD} -i -H 'X-Requested-By: ambari'  $CLUSTER2_AMBARI_PROTOCOL://$CLUSTER2_AMBARI_HOST:$CLUSTER2_AMBARI_PORT/api/v1/clusters | sed -n 's/.*"cluster_name" : "\([^\"]*\)".*/\1/p')"
-}
+	echo -e "\n`ts` Discovering Ambari Cluster Names from both clusters" |tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout
+	CLUSTER1_NAME="$(curl -u ${CLUSTER1_AMBARI_ADMIN_USER}:${CLUSTER1_AMBARI_ADMIN_PASSWORD} -i -k -H 'X-Requested-By: ambari'  $CLUSTER1_AMBARI_PROTOCOL://$CLUSTER1_AMBARI_HOST:$CLUSTER1_AMBARI_PORT/api/v1/clusters | sed -n 's/.*"cluster_name" : "\([^\"]*\)".*/\1/p')"
+	CLUSTER2_NAME="$(curl -u ${CLUSTER2_AMBARI_ADMIN_USER}:${CLUSTER2_AMBARI_ADMIN_PASSWORD} -i -k -H 'X-Requested-By: ambari'  $CLUSTER2_AMBARI_PROTOCOL://$CLUSTER2_AMBARI_HOST:$CLUSTER2_AMBARI_PORT/api/v1/clusters | sed -n 's/.*"cluster_name" : "\([^\"]*\)".*/\1/p')"
+	echo -e "\n`ts` CLUSTER1_NAME=$CLUSTER1_NAME, CLUSTER2_NAME=$CLUSTER2_NAME" |tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout
 
 mergeEtcHostsAndRedistribute(){
+	echo -e "\n`ts` Collect /etc/hosts from both cluster admin nodes and merge without duplicate entries/words. Then distribute modified /etc/hosts back to all nodes"
 	OLD_IFS=$IFS
 	IFS=$'\n'
 	sshpass -p $CLUSTER1_SSH_PASSWORD  scp  -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST:/etc/hosts $STAGE_LOC/etc_hosts.$CLUSTER1_AMBARI_HOST
@@ -128,9 +133,12 @@ mergeEtcHostsAndRedistribute(){
 		sshpass -p $CLUSTER2_SSH_PASSWORD  scp  -o StrictHostKeyChecking=no $STAGE_LOC/etc_hosts_merged_uniq_final root@$cluster_node:/etc/hosts
 	done
 	IFS=$OLD_IFS
+	echo -e "\n`ts` Modified /etc/hosts:" 
+	echo -e "\n`ts` `cat $STAGE_LOC/etc_hosts_merged_uniq_final`"
 }
 
 mergeAuthToLocalConfigAndReconfigure(){
+	echo -e "\n`ts` Collect hadoop.security.auth_to_local of core-site configuration from HDFS service of both clusters and merge them into one and redistribute back to both clusters"
 	sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER1_AMBARI_PROTOCOL --user=$CLUSTER1_AMBARI_ADMIN_USER --password=$CLUSTER1_AMBARI_ADMIN_PASSWORD --port=$CLUSTER1_AMBARI_PORT --action=get --host=$CLUSTER1_AMBARI_HOST --cluster=$CLUSTER1_NAME --config-type=core-site" > $STAGE_LOC/core-site_$CLUSTER1_AMBARI_HOST
 	cluster1_auth_to_local=`cat $STAGE_LOC/core-site_$CLUSTER1_AMBARI_HOST | grep hadoop.security.auth_to_local | cut -d '"' -f4`
 	sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER2_AMBARI_PROTOCOL --user=$CLUSTER2_AMBARI_ADMIN_USER --password=$CLUSTER2_AMBARI_ADMIN_PASSWORD --port=$CLUSTER2_AMBARI_PORT --action=get --host=$CLUSTER2_AMBARI_HOST --cluster=$CLUSTER2_NAME --config-type=core-site" > $STAGE_LOC/core-site_$CLUSTER2_AMBARI_HOST
@@ -138,67 +146,112 @@ mergeAuthToLocalConfigAndReconfigure(){
 	cluster2_auth_to_local=`echo $cluster2_auth_to_local | sed "s/DEFAULT//g"`
 	echo "$cluster1_auth_to_local" > $STAGE_LOC/temp_value_cluster1
 	echo "$cluster2_auth_to_local" >> $STAGE_LOC/temp_value_cluster1
-	sed -i 's/\\n/\n/g' $STAGE_LOC/temp_value_cluster1
-	sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER1_AMBARI_PROTOCOL --user=$CLUSTER1_AMBARI_ADMIN_USER --password=$CLUSTER1_AMBARI_ADMIN_PASSWORD --port=$CLUSTER1_AMBARI_PORT --action=set --host=$CLUSTER1_AMBARI_HOST --cluster=$CLUSTER1_NAME --config-type=core-site -k hadoop.security.auth_to_local -v "`cat $STAGE_LOC/temp_value_cluster1`"
+	sed -i.bkp 's/\\n/\'$'\n''/g' $STAGE_LOC/temp_value_cluster1
+	sed -i.bkp 's/\$/\\$/g' temp_value_cluster1
+	sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER1_AMBARI_PROTOCOL --user=$CLUSTER1_AMBARI_ADMIN_USER --password=$CLUSTER1_AMBARI_ADMIN_PASSWORD --port=$CLUSTER1_AMBARI_PORT --action=set --host=$CLUSTER1_AMBARI_HOST --cluster=$CLUSTER1_NAME --config-type=core-site -k hadoop.security.auth_to_local -v \"`cat $STAGE_LOC/temp_value_cluster1`\""
 	
 	cluster2_auth_to_local=`cat $STAGE_LOC/core-site_$CLUSTER2_AMBARI_HOST | grep hadoop.security.auth_to_local | cut -d '"' -f4`
 	cluster1_auth_to_local=`echo $cluster1_auth_to_local | sed "s/DEFAULT//g"`
 	echo "$cluster2_auth_to_local" > $STAGE_LOC/temp_value_cluster2
 	echo "$cluster1_auth_to_local" >> $STAGE_LOC/temp_value_cluster2
-	sed -i 's/\\n/\n/g' $STAGE_LOC/temp_value_cluster2
-	sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER2_AMBARI_PROTOCOL --user=$CLUSTER2_AMBARI_ADMIN_USER --password=$CLUSTER2_AMBARI_ADMIN_PASSWORD --port=$CLUSTER2_AMBARI_PORT --action=set --host=$CLUSTER2_AMBARI_HOST --cluster=$CLUSTER2_NAME --config-type=core-site -k hadoop.security.auth_to_local -v "`cat $STAGE_LOC/temp_value_cluster1`"
+	sed -i.bkp 's/\\n/\'$'\n''/g' $STAGE_LOC/temp_value_cluster2
+	sed -i.bkp 's/\$/\\$/g' temp_value_cluster2
+	sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER2_AMBARI_PROTOCOL --user=$CLUSTER2_AMBARI_ADMIN_USER --password=$CLUSTER2_AMBARI_ADMIN_PASSWORD --port=$CLUSTER2_AMBARI_PORT --action=set --host=$CLUSTER2_AMBARI_HOST --cluster=$CLUSTER2_NAME --config-type=core-site -k hadoop.security.auth_to_local -v \"`cat $STAGE_LOC/temp_value_cluster2`\""
+	echo -e "\n`ts` Modified hadoop.security.auth_to_local for cluster $CLUSTER1_NAME:"
+	echo -e "\n`ts` `cat $STAGE_LOC/temp_value_cluster1`"
+	echo -e "\n`ts` Modified hadoop.security.auth_to_local for cluster $CLUSTER2_NAME:"
+	echo -e "\n`ts` `cat $STAGE_LOC/temp_value_cluster2`"
 }
 
-#configureKrb5Conf(){
-#	sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER1_AMBARI_PROTOCOL --user=$CLUSTER1_AMBARI_ADMIN_USER --password=$CLUSTER1_AMBARI_ADMIN_PASSWORD --port=$CLUSTER1_AMBARI_PORT --action=get --host=$CLUSTER1_AMBARI_HOST --cluster=$CLUSTER1_NAME --config-type=krb5-conf" > $STAGE_LOC/krb5-conf_complete_$CLUSTER1_AMBARI_HOST
-#	sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER2_AMBARI_PROTOCOL --user=$CLUSTER2_AMBARI_ADMIN_USER --password=$CLUSTER2_AMBARI_ADMIN_PASSWORD --port=$CLUSTER2_AMBARI_PORT --action=get --host=$CLUSTER2_AMBARI_HOST --cluster=$CLUSTER2_NAME --config-type=krb5-conf" > $STAGE_LOC/krb5-conf_complete_$CLUSTER2_AMBARI_HOST
-	#sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER1_AMBARI_PROTOCOL --user=$CLUSTER1_AMBARI_ADMIN_USER --password=$CLUSTER1_AMBARI_ADMIN_PASSWORD --port=$CLUSTER1_AMBARI_PORT --action=get --host=$CLUSTER1_AMBARI_HOST --cluster=$CLUSTER1_NAME --config-type=kerberos-env" > $STAGE_LOC/kerberos-env_complete_$CLUSTER1_AMBARI_HOST
-	#sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER2_AMBARI_PROTOCOL --user=$CLUSTER2_AMBARI_ADMIN_USER --password=$CLUSTER2_AMBARI_ADMIN_PASSWORD --port=$CLUSTER2_AMBARI_PORT --action=get --host=$CLUSTER2_AMBARI_HOST --cluster=$CLUSTER2_NAME --config-type=kerberos-env" > $STAGE_LOC/kerberos-env_complete_$CLUSTER2_AMBARI_HOST
-	#cluster1_admin_server_host=`cat $STAGE_LOC/kerberos-env_complete_$CLUSTER1_AMBARI_HOST | grep admin_server_host | cut -d '"' -f4`
-	#cluster1_kdc_hosts=`cat $STAGE_LOC/kerberos-env_complete_$CLUSTER1_AMBARI_HOST | grep kdc_hosts | cut -d '"' -f4`
-	#cluster2_admin_server_host=`cat $STAGE_LOC/kerberos-env_complete_$CLUSTER2_AMBARI_HOST | grep admin_server_host | cut -d '"' -f4`
-	#cluster2_kdc_hosts=`cat $STAGE_LOC/kerberos-env_complete_$CLUSTER2_AMBARI_HOST | grep kdc_hosts | cut -d '"' -f4`
-	#
-	#cat $STAGE_LOC/krb5-conf_complete_$CLUSTER1_AMBARI_HOST | grep content | cut -d '"' -f4 > $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST  
-	#sed -i.bkp 's/\\n/\n/g' $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
-	#cat $STAGE_LOC/krb5-conf_complete_$CLUSTER2_AMBARI_HOST | grep content | cut -d '"' -f4 > $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST  
-	#sed -i.bkp 's/\\n/\n/g' $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
-	#cluster1_realm=`cat $STAGE_LOC/krb5-conf_complete_CLUSTER1_AMBARI_HOST | grep realm | cut -d '"' -f4`
-	#cluster2_realm=`cat $STAGE_LOC/kerberos-env_complete_$CLUSTER1_AMBARI_HOST | grep realm | cut -d '"' -f4`
-	#cluster1_domain_name=`sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST 'hostname -d'`
-	#cluster2_domain_name=`sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST 'hostname -d'`
-#
-	#sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER1_AMBARI_PROTOCOL --user=$CLUSTER1_AMBARI_ADMIN_USER --password=$CLUSTER1_AMBARI_ADMIN_PASSWORD --port=$CLUSTER1_AMBARI_PORT --action=set --host=$CLUSTER1_AMBARI_HOST --cluster=$CLUSTER1_NAME --config-type=krb5-conf -k domains -v $cluster1_domain_name"
-	#sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER2_AMBARI_PROTOCOL --user=$CLUSTER2_AMBARI_ADMIN_USER --password=$CLUSTER2_AMBARI_ADMIN_PASSWORD --port=$CLUSTER2_AMBARI_PORT --action=set --host=$CLUSTER2_AMBARI_HOST --cluster=$CLUSTER2_NAME --config-type=krb5-conf -k domains -v $cluster2_domain_name"
-	#
-	#sed -i.bkp "/\[domain_realm\]/a   $cluster2_domain_name = $cluster2_realm" $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
-	#sed -i.bkp "/\[domain_realm\]/a   $cluster1_domain_name = $cluster1_realm" $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
-	#
-	#sed -i.bkp "/\[realms\]/a $cluster2_realm = {\n    admin_server = $cluster2_admin_server_host\n    kdc = $cluster2_kdc_hosts\n}\n' $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
-	#sed -i.bkp "/\[realms\]/a $cluster1_realm = {\n    admin_server = $cluster1_admin_server_host\n    kdc = $cluster1_kdc_hosts\n}\n' $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
-	#
-	#echo "[capaths]" >> $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
-	#echo "  $cluster1_realm = {" >> $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
-	#echo "        $cluster2_realm = ." >> $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
-	#echo "}" >> $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
+configureKrb5Conf(){
+	echo -e "\n`ts` Modifying krb5-conf template in Kerberos service for both clusters"
+	sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER1_AMBARI_PROTOCOL --user=$CLUSTER1_AMBARI_ADMIN_USER --password=$CLUSTER1_AMBARI_ADMIN_PASSWORD --port=$CLUSTER1_AMBARI_PORT --action=get --host=$CLUSTER1_AMBARI_HOST --cluster=$CLUSTER1_NAME --config-type=krb5-conf" > $STAGE_LOC/krb5-conf_complete_$CLUSTER1_AMBARI_HOST
+	sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER2_AMBARI_PROTOCOL --user=$CLUSTER2_AMBARI_ADMIN_USER --password=$CLUSTER2_AMBARI_ADMIN_PASSWORD --port=$CLUSTER2_AMBARI_PORT --action=get --host=$CLUSTER2_AMBARI_HOST --cluster=$CLUSTER2_NAME --config-type=krb5-conf" > $STAGE_LOC/krb5-conf_complete_$CLUSTER2_AMBARI_HOST
+	sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER1_AMBARI_PROTOCOL --user=$CLUSTER1_AMBARI_ADMIN_USER --password=$CLUSTER1_AMBARI_ADMIN_PASSWORD --port=$CLUSTER1_AMBARI_PORT --action=get --host=$CLUSTER1_AMBARI_HOST --cluster=$CLUSTER1_NAME --config-type=kerberos-env" > $STAGE_LOC/kerberos-env_complete_$CLUSTER1_AMBARI_HOST
+	sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER2_AMBARI_PROTOCOL --user=$CLUSTER2_AMBARI_ADMIN_USER --password=$CLUSTER2_AMBARI_ADMIN_PASSWORD --port=$CLUSTER2_AMBARI_PORT --action=get --host=$CLUSTER2_AMBARI_HOST --cluster=$CLUSTER2_NAME --config-type=kerberos-env" > $STAGE_LOC/kerberos-env_complete_$CLUSTER2_AMBARI_HOST
+	cluster1_admin_server_host=`cat $STAGE_LOC/kerberos-env_complete_$CLUSTER1_AMBARI_HOST | grep admin_server_host | cut -d '"' -f4`
+	cluster1_kdc_hosts=`cat $STAGE_LOC/kerberos-env_complete_$CLUSTER1_AMBARI_HOST | grep kdc_hosts | cut -d '"' -f4`
+	cluster2_admin_server_host=`cat $STAGE_LOC/kerberos-env_complete_$CLUSTER2_AMBARI_HOST | grep admin_server_host | cut -d '"' -f4`
+	cluster2_kdc_hosts=`cat $STAGE_LOC/kerberos-env_complete_$CLUSTER2_AMBARI_HOST | grep kdc_hosts | cut -d '"' -f4`
 	
-	#echo "[capaths]" >> $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
-	#echo "  $cluster2_realm = {" >> $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
-	#echo "        $cluster1_realm = ." >> $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
-	#echo "}" >> $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
-	#
-	#sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER1_AMBARI_PROTOCOL --user=$CLUSTER1_AMBARI_ADMIN_USER --password=$CLUSTER1_AMBARI_ADMIN_PASSWORD --port=$CLUSTER1_AMBARI_PORT --action=set --host=$CLUSTER1_AMBARI_HOST --cluster=$CLUSTER1_NAME --config-type=krb5-conf -k content -v `cat $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST`"
-	#sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER2_AMBARI_PROTOCOL --user=$CLUSTER2_AMBARI_ADMIN_USER --password=$CLUSTER2_AMBARI_ADMIN_PASSWORD --port=$CLUSTER2_AMBARI_PORT --action=set --host=$CLUSTER2_AMBARI_HOST --cluster=$CLUSTER2_NAME --config-type=krb5-conf -k content -v `cat $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST`"
-	#
-	#sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST "kadmin.local -q 'addprinc -pw $CLUSTER1_KADMIN_PASSWORD krbtgt/$cluster1_realm@$cluster2_realm'"
-	#sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST "kadmin.local -q 'addprinc -pw $CLUSTER1_KADMIN_PASSWORD krbtgt/$cluster2_realm@$cluster1_realm'"
-	#sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "kadmin.local -q 'addprinc -pw $CLUSTER2_KADMIN_PASSWORD krbtgt/$cluster1_realm@$cluster2_realm'"
-	#sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "kadmin.local -q 'addprinc -pw $CLUSTER2_KADMIN_PASSWORD krbtgt/$cluster2_realm@$cluster1_realm'"
-#}
+	cat $STAGE_LOC/krb5-conf_complete_$CLUSTER1_AMBARI_HOST | grep content | cut -d '"' -f4 > $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST  
+	sed -i.bkp 's/\\n/\'$'\n''/g' $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
+	cat $STAGE_LOC/krb5-conf_complete_$CLUSTER2_AMBARI_HOST | grep content | cut -d '"' -f4 > $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST  
+	sed -i.bkp 's/\\n/\'$'\n''/g' $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
+	cluster1_realm=`cat $STAGE_LOC/kerberos-env_complete_$CLUSTER1_AMBARI_HOST | grep realm | cut -d '"' -f4`
+	cluster2_realm=`cat $STAGE_LOC/kerberos-env_complete_$CLUSTER2_AMBARI_HOST | grep realm | cut -d '"' -f4`
+	cluster1_domain_name=`sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST 'hostname -d'`
+	cluster2_domain_name=`sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST 'hostname -d'`
 
-#init
-initAmbariPorts
-initClusterNames
-mergeEtcHostsAndRedistribute
-#mergeAuthToLocalConfigAndReconfigure
-#configureKrb5Conf
+	sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER1_AMBARI_PROTOCOL --user=$CLUSTER1_AMBARI_ADMIN_USER --password=$CLUSTER1_AMBARI_ADMIN_PASSWORD --port=$CLUSTER1_AMBARI_PORT --action=set --host=$CLUSTER1_AMBARI_HOST --cluster=$CLUSTER1_NAME --config-type=krb5-conf -k domains -v $cluster1_domain_name"
+	sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER2_AMBARI_PROTOCOL --user=$CLUSTER2_AMBARI_ADMIN_USER --password=$CLUSTER2_AMBARI_ADMIN_PASSWORD --port=$CLUSTER2_AMBARI_PORT --action=set --host=$CLUSTER2_AMBARI_HOST --cluster=$CLUSTER2_NAME --config-type=krb5-conf -k domains -v $cluster2_domain_name"
+	
+	sed -i.bkp "/\[domain_realm\]/ a\\
+	\ \ $cluster2_domain_name = $cluster2_realm\\
+	" $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
+
+	sed -i.bkp "/\[domain_realm\]/ a\\
+	\ \ $cluster1_domain_name = $cluster1_realm\\
+	" $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
+	
+	sed -i.bkp "/\[realms\]/ a\\
+	\ \ $cluster2_realm = {\\
+	\ \ \ \ admin_server = $cluster2_admin_server_host\\
+	\ \ \ \ kdc = $cluster2_kdc_hosts\\
+	\ }\\
+	" $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
+	
+	sed -i.bkp "/\[realms\]/ a\\
+	\ \ $cluster1_realm = {\\
+	\ \ \ \ admin_server = $cluster1_admin_server_host\\
+	\ \ \ \ kdc = $cluster1_kdc_hosts\\
+	\ }\\
+	" $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
+	
+	echo "[capaths]" >> $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
+	echo "  $cluster1_realm = {" >> $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
+	echo "        $cluster2_realm = ." >> $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
+	echo "}" >> $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
+	echo "" >> $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
+	
+	echo "[capaths]" >> $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
+	echo "  $cluster2_realm = {" >> $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
+	echo "        $cluster1_realm = ." >> $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
+	echo "}" >> $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
+	echo "" >> $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
+
+		
+	sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER1_AMBARI_PROTOCOL --user=$CLUSTER1_AMBARI_ADMIN_USER --password=$CLUSTER1_AMBARI_ADMIN_PASSWORD --port=$CLUSTER1_AMBARI_PORT --action=set --host=$CLUSTER1_AMBARI_HOST --cluster=$CLUSTER1_NAME --config-type=krb5-conf -k content -v \"`cat $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST`\""
+	sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER2_AMBARI_PROTOCOL --user=$CLUSTER2_AMBARI_ADMIN_USER --password=$CLUSTER2_AMBARI_ADMIN_PASSWORD --port=$CLUSTER2_AMBARI_PORT --action=set --host=$CLUSTER2_AMBARI_HOST --cluster=$CLUSTER2_NAME --config-type=krb5-conf -k content -v \"`cat $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST`\""
+	
+	sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST "kadmin.local -q 'addprinc -pw $CLUSTER1_KADMIN_PASSWORD krbtgt/$cluster1_realm@$cluster2_realm'"
+	sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST "kadmin.local -q 'addprinc -pw $CLUSTER1_KADMIN_PASSWORD krbtgt/$cluster2_realm@$cluster1_realm'"
+	sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "kadmin.local -q 'addprinc -pw $CLUSTER2_KADMIN_PASSWORD krbtgt/$cluster1_realm@$cluster2_realm'"
+	sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "kadmin.local -q 'addprinc -pw $CLUSTER2_KADMIN_PASSWORD krbtgt/$cluster2_realm@$cluster1_realm'"
+	echo -e "\n`ts` Modified krb5-conf template for cluster $CLUSTER1_NAME:"
+	echo -e "\n`ts` `cat $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST`"
+	echo -e "\n`ts` Modified krb5-conf template for cluster $CLUSTER2_NAME:"
+	echo -e "\n`ts` `cat $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST`"
+}
+
+stopAllServices(){
+	echo -e "\n`ts` Stopping all the services for cluster $CLUSTER1_NAME"
+        curl -H "X-Requested-By:ambari" -u $CLUSTER1_AMBARI_ADMIN_USER:$CLUSTER1_AMBARI_ADMIN_PASSWORD -i -k -X PUT -d '{"RequestInfo": {"context" :"Stopping All Services (via Squadron)"}, "ServiceInfo": {"state" : "INSTALLED"}}' $CLUSTER1_AMBARI_PROTOCOL://$CLUSTER1_AMBARI_HOST:$CLUSTER1_AMBARI_PORT/api/v1/clusters/$CLUSTER1_NAME/services
+	echo -e "\n`ts` Stopping all the services for cluster $CLUSTER2_NAME"
+        curl -H "X-Requested-By:ambari" -u $CLUSTER2_AMBARI_ADMIN_USER:$CLUSTER2_AMBARI_ADMIN_PASSWORD -i -k -X PUT -d '{"RequestInfo": {"context" :"Stopping All Services (via Squadron)"}, "ServiceInfo": {"state" : "INSTALLED"}}' $CLUSTER2_AMBARI_PROTOCOL://$CLUSTER2_AMBARI_HOST:$CLUSTER2_AMBARI_PORT/api/v1/clusters/$CLUSTER2_NAME/services
+        echo -e "\n`ts` Sleeping for 60 seconds"
+        sleep 60
+}
+
+startAllServices(){
+	echo -e "\n`ts` Starting all services "
+        curl -H "X-Requested-By:ambari" -u $CLUSTER1_AMBARI_ADMIN_USER:$CLUSTER1_AMBARI_ADMIN_PASSWORD -i -k -X PUT -d '{"RequestInfo": {"context" :"Starting All Services (via Squadron)"}, "ServiceInfo": {"state" : "STARTED"}}' $CLUSTER1_AMBARI_PROTOCOL://$CLUSTER1_AMBARI_HOST:$CLUSTER1_AMBARI_PORT/api/v1/clusters/$CLUSTER1_NAME/services
+        curl -H "X-Requested-By:ambari" -u $CLUSTER2_AMBARI_ADMIN_USER:$CLUSTER2_AMBARI_ADMIN_PASSWORD -i -k -X PUT -d '{"RequestInfo": {"context" :"Starting All Services (via Squadron)"}, "ServiceInfo": {"state" : "STARTED"}}' $CLUSTER2_AMBARI_PROTOCOL://$CLUSTER2_AMBARI_HOST:$CLUSTER2_AMBARI_PORT/api/v1/clusters/$CLUSTER2_NAME/services
+        echo -e "\n`ts` Please check Ambari UI\nThank You! :)"
+}
+
+mergeEtcHostsAndRedistribute|tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout 2>>/$STAGE_LOC/cross_realm_setup.stderr
+mergeAuthToLocalConfigAndReconfigure|tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout 2>>/$STAGE_LOC/cross_realm_setup.stderr
+configureKrb5Conf|tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout 2>>/$STAGE_LOC/cross_realm_setup.stderr
+stopAllServices|tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout 2>>/$STAGE_LOC/cross_realm_setup.stderr
+startAllServices|tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout 2>>/$STAGE_LOC/cross_realm_setup.stderr
