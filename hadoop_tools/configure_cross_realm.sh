@@ -2,20 +2,27 @@
 #Author - Srinivasu Majeti(smajeti@cloudera.com)
 #Script to configure cross real between two MIT KDC enabled kerberized clusters
 #Cloudera Inc.
+#Two mandatory arguments to this script : 
+#  First argument: IP Address of the second cluster ambari server
+#  Second argument: ssh root password of the ambari server (assuming both ambari servers are with same ssh password)
+#  Third argument (OPTIONAL) : IP address of the first cluster ambari server if script it not run from ambari server of the first cluster.
 ###########################################
-set -x
 
 STAGE_LOC="/tmp/stage/cross-realm-`date '+%Y%m%d%H%M%S'`"
 mkdir -p $STAGE_LOC
 rm -rf $STAGE_LOC/*
 #User Input Required Mandatory
-CLUSTER1_SSH_PASSWORD=smajeti
-CLUSTER2_AMBARI_HOST=c2265-node1.labs.support.hortonworks.com
+CLUSTER2_AMBARI_HOST=$1
+CLUSTER1_SSH_PASSWORD=$2
+CLUSTER1_AMBARI_HOST=$3
 
 #User Input Required Optional . Assumed to be same as first cluster/defaults if not given input
 CLUSTER1_KADMIN_PASSWORD=hadoop
 CLUSTER2_KADMIN_PASSWORD=hadoop
-CLUSTER1_AMBARI_HOST=c1265-node1.squadron.support.hortonworks.com	
+if [ $CLUSTER1_AMBARI_HOST == "" ];
+then
+	CLUSTER1_AMBARI_HOST=localhost
+fi
 CLUSTER1_AMBARI_ADMIN_PASSWORD=$CLUSTER1_SSH_PASSWORD
 CLUSTER2_SSH_PASSWORD=$CLUSTER1_SSH_PASSWORD
 CLUSTER1_AMBARI_ADMIN_USER=admin
@@ -51,6 +58,20 @@ CLUSTER2_DOMAIN=""
 #      ;;
 #  esac
 #done
+
+getMachineType()
+{
+	unameOut="$(uname -s)"
+	case "${unameOut}" in
+    	Linux*)     machine=Linux;;
+    	Darwin*)    machine=Mac;;
+    	CYGWIN*)    machine=Cygwin;;
+    	MINGW*)     machine=MinGw;;
+    	*)          machine="UNKNOWN:${unameOut}"
+	esac
+	echo ${machine}
+}
+
 ts()
 {
         echo "`date +%Y-%m-%d,%H:%M:%S`"
@@ -58,6 +79,15 @@ ts()
 
 	echo -e "\n`ts` Installing sshpass as needed" |tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout
 	(brew list sshpass || brew install sshpass || yum list installed sshpass || yum -y install sshpass) > /dev/null 2>&1
+	echo -e "\n`ts` Retrieving hostname for $CLUSTER2_AMBARI_HOST" |tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout
+	ssh-keygen -R $CLUSTER1_AMBARI_HOST
+	ssh-keygen -R $CLUSTER2_AMBARI_HOST
+	if [ $CLUSTER1_AMBARI_HOST != "localhost" ];
+	then
+		echo -e "\n`ts` Retrieving hostname for $CLUSTER1_AMBARI_HOST" |tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout
+		CLUSTER1_AMBARI_HOST=`sshpass -p $CLUSTER1_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER1_AMBARI_HOST 'hostname -f'`
+	fi
+	CLUSTER2_AMBARI_HOST=`sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST 'hostname -f'`
 	ssh-keygen -R $CLUSTER1_AMBARI_HOST
 	ssh-keygen -R $CLUSTER2_AMBARI_HOST
 
@@ -112,8 +142,15 @@ mergeEtcHostsAndRedistribute(){
         if [ "$duplicated_words" != "" ]; then
                 for duplicate_word in $duplicated_words
                 do
-                        sed -i '' "s/\b$duplicate_word\b//g" $STAGE_LOC/etc_hosts_merged_uniq_final
-                        sed -i '' "s/ $duplicate_word$//g" $STAGE_LOC/etc_hosts_merged_uniq_final
+			if [ $(getMachineType) == "Mac" ];
+			then
+                        	sed -i '' "s/ $duplicate_word //g" $STAGE_LOC/etc_hosts_merged_uniq_final
+                        	sed -i '' "s/ $duplicate_word$//g" $STAGE_LOC/etc_hosts_merged_uniq_final
+			elif [ $(getMachineType) == "Linux" ];
+			then
+                        	sed -i "s/ $duplicate_word //g" $STAGE_LOC/etc_hosts_merged_uniq_final
+                        	sed -i "s/ $duplicate_word$//g" $STAGE_LOC/etc_hosts_merged_uniq_final
+			fi
                 done
         fi
 
@@ -187,26 +224,26 @@ configureKrb5Conf(){
 	sshpass -p $CLUSTER2_SSH_PASSWORD ssh -o StrictHostKeyChecking=no root@$CLUSTER2_AMBARI_HOST "/var/lib/ambari-server/resources/scripts/configs.py --protocol=$CLUSTER2_AMBARI_PROTOCOL --user=$CLUSTER2_AMBARI_ADMIN_USER --password=$CLUSTER2_AMBARI_ADMIN_PASSWORD --port=$CLUSTER2_AMBARI_PORT --action=set --host=$CLUSTER2_AMBARI_HOST --cluster=$CLUSTER2_NAME --config-type=krb5-conf -k domains -v $cluster2_domain_name"
 	
 	sed -i.bkp "/\[domain_realm\]/ a\\
-	\ \ $cluster2_domain_name = $cluster2_realm\\
-	" $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
+\ \ $cluster2_domain_name = $cluster2_realm\\
+        " $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
 
 	sed -i.bkp "/\[domain_realm\]/ a\\
-	\ \ $cluster1_domain_name = $cluster1_realm\\
-	" $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
+\ \ $cluster1_domain_name = $cluster1_realm\\
+        " $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
 	
 	sed -i.bkp "/\[realms\]/ a\\
-	\ \ $cluster2_realm = {\\
-	\ \ \ \ admin_server = $cluster2_admin_server_host\\
-	\ \ \ \ kdc = $cluster2_kdc_hosts\\
-	\ }\\
-	" $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
+\ \ $cluster2_realm = {\\
+\ \ \ \ admin_server = $cluster2_admin_server_host\\
+\ \ \ \ kdc = $cluster2_kdc_hosts\\
+\ }\\
+        " $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
 	
 	sed -i.bkp "/\[realms\]/ a\\
-	\ \ $cluster1_realm = {\\
-	\ \ \ \ admin_server = $cluster1_admin_server_host\\
-	\ \ \ \ kdc = $cluster1_kdc_hosts\\
-	\ }\\
-	" $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
+\ \ $cluster1_realm = {\\
+\ \ \ \ admin_server = $cluster1_admin_server_host\\
+\ \ \ \ kdc = $cluster1_kdc_hosts\\
+\ }\\
+        " $STAGE_LOC/krb5-conf_content_$CLUSTER2_AMBARI_HOST
 	
 	echo "[capaths]" >> $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
 	echo "  $cluster1_realm = {" >> $STAGE_LOC/krb5-conf_content_$CLUSTER1_AMBARI_HOST
@@ -239,7 +276,7 @@ stopAllServices(){
         curl -H "X-Requested-By:ambari" -u $CLUSTER1_AMBARI_ADMIN_USER:$CLUSTER1_AMBARI_ADMIN_PASSWORD -i -k -X PUT -d '{"RequestInfo": {"context" :"Stopping All Services (via Squadron)"}, "ServiceInfo": {"state" : "INSTALLED"}}' $CLUSTER1_AMBARI_PROTOCOL://$CLUSTER1_AMBARI_HOST:$CLUSTER1_AMBARI_PORT/api/v1/clusters/$CLUSTER1_NAME/services
 	echo -e "\n`ts` Stopping all the services for cluster $CLUSTER2_NAME"
         curl -H "X-Requested-By:ambari" -u $CLUSTER2_AMBARI_ADMIN_USER:$CLUSTER2_AMBARI_ADMIN_PASSWORD -i -k -X PUT -d '{"RequestInfo": {"context" :"Stopping All Services (via Squadron)"}, "ServiceInfo": {"state" : "INSTALLED"}}' $CLUSTER2_AMBARI_PROTOCOL://$CLUSTER2_AMBARI_HOST:$CLUSTER2_AMBARI_PORT/api/v1/clusters/$CLUSTER2_NAME/services
-        echo -e "\n`ts` Sleeping for 60 seconds"
+	echo -e "\n`ts` Sleeping for 60 seconds"
         sleep 60
 }
 
@@ -247,11 +284,21 @@ startAllServices(){
 	echo -e "\n`ts` Starting all services "
         curl -H "X-Requested-By:ambari" -u $CLUSTER1_AMBARI_ADMIN_USER:$CLUSTER1_AMBARI_ADMIN_PASSWORD -i -k -X PUT -d '{"RequestInfo": {"context" :"Starting All Services (via Squadron)"}, "ServiceInfo": {"state" : "STARTED"}}' $CLUSTER1_AMBARI_PROTOCOL://$CLUSTER1_AMBARI_HOST:$CLUSTER1_AMBARI_PORT/api/v1/clusters/$CLUSTER1_NAME/services
         curl -H "X-Requested-By:ambari" -u $CLUSTER2_AMBARI_ADMIN_USER:$CLUSTER2_AMBARI_ADMIN_PASSWORD -i -k -X PUT -d '{"RequestInfo": {"context" :"Starting All Services (via Squadron)"}, "ServiceInfo": {"state" : "STARTED"}}' $CLUSTER2_AMBARI_PROTOCOL://$CLUSTER2_AMBARI_HOST:$CLUSTER2_AMBARI_PORT/api/v1/clusters/$CLUSTER2_NAME/services
-        echo -e "\n`ts` Please check Ambari UI\nThank You! :)"
+	echo -e "\n`ts` Please check Ambari UI\nThank You! :)"
 }
 
+restartServicesWithStaleconfigs()
+{
+	echo -e "\n`ts` Re-starting all services with stale config in both clusters"
+	curl  -u $CLUSTER1_AMBARI_ADMIN_USER:$CLUSTER1_AMBARI_ADMIN_PASSWORD -k -H "X-Requested-By: ambari" -X POST  -d '{"RequestInfo":{"command":"RESTART","context":"Restart all required services (via Squadron)","operation_level":"host_component"},"Requests/resource_filters":[{"hosts_predicate":"HostRoles/stale_configs=true&HostRoles/cluster_name='$CLUSTER1_NAME'"}]}' $CLUSTER1_AMBARI_PROTOCOL://$CLUSTER1_AMBARI_HOST:$CLUSTER1_AMBARI_PORT/api/v1/clusters/$CLUSTER1_NAME/requests
+	curl  -u $CLUSTER2_AMBARI_ADMIN_USER:$CLUSTER2_AMBARI_ADMIN_PASSWORD -k -H "X-Requested-By: ambari" -X POST  -d '{"RequestInfo":{"command":"RESTART","context":"Restart all required services (via Squadron)","operation_level":"host_component"},"Requests/resource_filters":[{"hosts_predicate":"HostRoles/stale_configs=true&HostRoles/cluster_name='$CLUSTER2_NAME'"}]}' $CLUSTER2_AMBARI_PROTOCOL://$CLUSTER2_AMBARI_HOST:$CLUSTER2_AMBARI_PORT/api/v1/clusters/$CLUSTER2_NAME/requests
+	echo -e "\n`ts` Please check Ambari UI\nThank You! :)"
+
+}
 mergeEtcHostsAndRedistribute|tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout 2>>/$STAGE_LOC/cross_realm_setup.stderr
 mergeAuthToLocalConfigAndReconfigure|tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout 2>>/$STAGE_LOC/cross_realm_setup.stderr
 configureKrb5Conf|tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout 2>>/$STAGE_LOC/cross_realm_setup.stderr
-stopAllServices|tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout 2>>/$STAGE_LOC/cross_realm_setup.stderr
-startAllServices|tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout 2>>/$STAGE_LOC/cross_realm_setup.stderr
+restartServicesWithStaleconfigs|tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout 2>>/$STAGE_LOC/cross_realm_setup.stderr
+#stopAllServices|tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout 2>>/$STAGE_LOC/cross_realm_setup.stderr
+#startAllServices|tee -a $STAGE_LOC/cross_realm_setup.log 1>>/$STAGE_LOC/cross_realm_setup.stdout 2>>/$STAGE_LOC/cross_realm_setup.stderr
+
