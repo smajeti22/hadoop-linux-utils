@@ -8,6 +8,8 @@ cluster_dfs_avg_usage=0
 first_time_match=true
 balancer_threshold=$1
 one_node_info_available=false
+data_copy_out_of_node_total=0
+data_copy_into_node_total=0
 #hdfs dfsadmin -report > dfsadmin_report
 while IFS='' read -r line || [[ -n "$line" ]]; do
     	#echo "Text read from file: $line"
@@ -50,6 +52,9 @@ while IFS='' read -r line || [[ -n "$line" ]]; do
 			data_movement=`bc -l <<< "scale=2;$curr_host_config_capacity * $manipulation/100"`
 			if (( $(echo "$deviation > 0" |bc -l) )); then
 				data_movement=`bc -l <<< "scale=2;(0 - $data_movement)"`
+				data_copy_out_of_node_total=`bc -l <<< "$data_copy_out_of_node_total + $data_movement"`
+			else
+				data_copy_into_node_total=`bc -l <<< "$data_copy_into_node_total + $data_movement"`
 			fi
 			echo "Manipulation ---> $manipulation (Data movement size:$data_movement (TB))"
 			new_dfs_util=`bc -l <<< "scale=2;($curr_host_dfs_usage_size + $data_movement)*100/$curr_host_config_capacity"`			
@@ -61,3 +66,5 @@ while IFS='' read -r line || [[ -n "$line" ]]; do
 	fi
 	
 done < "dfsadmin_report"
+echo data_copy_out_of_node_total:$data_copy_out_of_node_total
+echo data_copy_into_node_total:$data_copy_into_node_total
